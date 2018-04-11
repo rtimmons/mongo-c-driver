@@ -1,9 +1,8 @@
 #include <mongoc.h>
 
 int
-main ()
+run_example(bson_t* pipeline)
 {
-   bson_t empty = BSON_INITIALIZER;
    const bson_t *doc;
    bson_t *to_insert = BCON_NEW ("x", BCON_INT32 (1));
    const bson_t *err_doc;
@@ -18,15 +17,15 @@ main ()
    mongoc_init ();
 
    client = mongoc_client_new ("mongodb://"
-                               "localhost:27017,localhost:27018,localhost:"
-                               "27019/db?replicaSet=rs0");
+                               "localhost:27017,localhost:27018"
+                               "/db?replicaSet=replset");
    if (!client) {
       fprintf (stderr, "Could not connect to replica set\n");
       return 1;
    }
 
    coll = mongoc_client_get_collection (client, "db", "coll");
-   stream = mongoc_collection_watch (coll, &empty, NULL);
+   stream = mongoc_collection_watch (coll, pipeline, NULL);
 
    mongoc_write_concern_set_wmajority (wc, 10000);
    mongoc_write_concern_append (wc, &opts);
@@ -37,6 +36,10 @@ main ()
    }
 
    while (mongoc_change_stream_next (stream, &doc)) {
+      char *pipe_json = bson_as_relaxed_extended_json (pipeline, NULL);
+      fprintf (stderr, "Pipeline: %s\n", pipe_json);
+      bson_free (pipe_json);
+
       char *as_json = bson_as_relaxed_extended_json (doc, NULL);
       fprintf (stderr, "Got document: %s\n", as_json);
       bson_free (as_json);
@@ -60,4 +63,30 @@ main ()
    mongoc_collection_destroy (coll);
    mongoc_client_destroy (client);
    mongoc_cleanup ();
+}
+
+int
+example_one ()
+{
+   bson_t pipeline = BSON_INITIALIZER;
+   return run_example(&pipeline);
+}
+
+
+int
+example_two()
+{
+   bson_t* pipeline = BCON_NEW ("$match", "{",
+                                "operationType", "update", "}");
+   return run_example(pipeline);
+}
+
+int
+main()
+{
+//   int one = example_one();
+   int two = example_two();
+
+//   return two;
+return 0;
 }
